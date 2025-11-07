@@ -1,0 +1,152 @@
+replicaCount: 2
+
+imagePullSecrets:
+  - name: ecr-secret
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  tag: ""
+
+containers:
+  - name: vee-api
+    image: "205930611114.dkr.ecr.ap-south-1.amazonaws.com/usdt/prod/usdt-widget-backend"
+    imagePullPolicy: Always
+    securityContext: {}
+      # capabilities:
+      #   drop:
+      #   - ALL
+      # readOnlyRootFilesystem: true
+      # runAsNonRoot: true
+      # runAsUser: 1000
+    ports:
+      - name: http
+        containerPort: 8000
+        protocol: TCP
+    livenessProbe:
+      enabled: true
+      timeoutSeconds: 30
+      periodSeconds: 60
+      timeoutSeconds: 60
+      failureThreshold: 3
+      successThreshold: 1
+      path: api/v1/healthz     # <-- Added leading slash
+      healthcheckHttps: false
+      port: 8000
+    readinessProbe:
+      enabled: true
+      timeoutSeconds: 30
+      periodSeconds: 60
+      timeoutSeconds: 60
+      failureThreshold: 3
+      successThreshold: 1
+      path: api/v1/ready   # <-- Added leading slash
+      port: 8000
+    startupProbe:                                   # <-- Added startupProbe
+      enabled: false
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+      path: 
+      port: 8000
+      healthcheckHttps: false
+    resources: {}
+      # limits:
+      #   cpu: 5
+      #   memory: 8Gi
+      # requests:
+      #   cpu: 3
+      #   memory: 5Gi
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  name: s3-access-sa
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+  externalTrafficPolicy: Local
+deployment:
+  minReadySeconds: 60       
+  rollingUpdate:
+    maxUnavailable: "25%"   
+    maxSurge: "25%" 
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-south-1:975050019771:certificate/1f4882bc-5362-4217-bbda-464547f7f9f2"
+    alb.ingress.kubernetes.io/group.name: usdt-private-service
+    alb.ingress.kubernetes.io/ip-address-type: dualstack
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/subnets: "subnet-0116725e293adfa22, subnet-043b612ee73760003, subnet-06f0cf4a8545432d7"
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/tags: map-migrated=mig70U3Z9VNAJ
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+
+  hosts:
+    - host: usdt.testmvvnl.in
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+autoscaling:
+  enabled: false
+  # minReplicas: 4
+  # maxReplicas: 7
+  # targetCPUUtilizationPercentage: 50
+  # targetMemoryUtilizationPercentage: 60
+
+# nodeSelector:
+#   kubernetes.io/arch: arm64
+
+# tolerations: []
+
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#       - matchExpressions:
+#         - key: eks.amazonaws.com/nodegroup
+#           operator: NotIn
+#           values:
+#           - gomati-amd-ng
+#           - node-amd-Dev-gomati
+
+podAntiAffinity:
+  enabled: false
+  topologyKey: "kubernetes.io/hostname"
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+
+tolerations:
+  - key: "service"
+    operator: "Equal"
+    value: "USDT"
+    effect: "NoSchedule"
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: eks.amazonaws.com/nodegroup
+          operator: In
+          values:
+          - USDTApplicationNG
+
+topologySpreadConstraints:
+  enabled: true

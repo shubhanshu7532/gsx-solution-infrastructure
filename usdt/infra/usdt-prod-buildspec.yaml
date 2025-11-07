@@ -19,14 +19,14 @@ phases:
   pre_build:
     commands:
       - echo "Logging in to Amazon ECR..."
-      - export REPOSITORY_URI=$REPOSITORY_URI/gomati/prod/mdms/vee-api
+      - export REPOSITORY_URI=$REPOSITORY_URI/usdt/prod/usdt-widget-backend
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=build-$(echo $CODEBUILD_BUILD_ID | awk -F":" '{print $2}')
 
   build:
     commands:
-      - aws ssm get-parameter --name "/gomati/prod/mdms/vee-api" --with-decryption --query "Parameter.Value" --output text > env.json
+      - aws ssm get-parameter --name "/usdt/prod/usdt-widget-backend" --with-decryption --query "Parameter.Value" --output text > env.json
       - jq -r 'to_entries | .[] | "\(.key)=\(.value)"' env.json > $CODEBUILD_SRC_DIR_CodeCatalyst/.env
       - docker build -t $REPOSITORY_URI:latest $CODEBUILD_SRC_DIR_CodeCatalyst
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
@@ -43,6 +43,6 @@ phases:
       - echo "Updating kubeconfig..."
       - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_DEFAULT_REGION
       - echo "Deploying to EKS using Helm..."
-      - helm upgrade --install vee-api ./mdms-vee-api/infra/helm-chart/ -f ./mdms-vee-api/infra/helm-chart/Gomati-prod-values.yaml --set image.tag=$IMAGE_TAG --namespace mdms
+      - helm upgrade --install usdt-widget-backend ./usdt/infra/helm/ -f ./usdt/infra/helm/usdt-prod-values.yaml --set image.tag=$IMAGE_TAG --namespace usdt-widget
       - echo "Deployment complete."
-      - kubectl get all -n mdms
+      - kubectl get all -n usdt-widget
