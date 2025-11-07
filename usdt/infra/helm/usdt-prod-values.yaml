@@ -9,7 +9,7 @@ image:
   tag: ""
 
 containers:
-  - name: vee-api
+  - name: usdt-widget-backend
     image: "205930611114.dkr.ecr.ap-south-1.amazonaws.com/usdt/prod/usdt-widget-backend"
     imagePullPolicy: Always
     securityContext: {}
