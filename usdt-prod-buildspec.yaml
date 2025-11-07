@@ -1,0 +1,48 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+      - chmod 700 get_helm.sh
+      - ./get_helm.sh
+      - echo "Installing kubectl..."
+      - curl -LO "https://dl.k8s.io/release/v1.27.2/bin/linux/amd64/kubectl"
+      - chmod +x ./kubectl
+      - mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl
+      - export PATH=$PATH:$HOME/bin
+      - echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
+      - source ~/.bashrc
+      - echo "Check kubectl version..."
+      - kubectl version --client
+
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - export REPOSITORY_URI=$REPOSITORY_URI/gomati/prod/mdms/vee-api
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=build-$(echo $CODEBUILD_BUILD_ID | awk -F":" '{print $2}')
+
+  build:
+    commands:
+      - aws ssm get-parameter --name "/gomati/prod/mdms/vee-api" --with-decryption --query "Parameter.Value" --output text > env.json
+      - jq -r 'to_entries | .[] | "\(.key)=\(.value)"' env.json > $CODEBUILD_SRC_DIR_CodeCatalyst/.env
+      - docker build -t $REPOSITORY_URI:latest $CODEBUILD_SRC_DIR_CodeCatalyst
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - echo "Docker build and tagging completed on $(date)"
+
+  post_build:
+    commands:
+      - echo "Pushing the Docker images..."
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo "Assuming role for EKS deployment..."
+      - CREDENTIALS=$(aws sts assume-role --role-arn arn:aws:iam::975050019771:role/assume-role-codebuild --role-session-name eks-codebuild --duration-seconds 900) && export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r '.Credentials.AccessKeyId') && export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r '.Credentials.SecretAccessKey') && export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r '.Credentials.SessionToken')
+      - export KUBECONFIG=$HOME/.kube/config
+      - echo "Updating kubeconfig..."
+      - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_DEFAULT_REGION
+      - echo "Deploying to EKS using Helm..."
+      - helm upgrade --install vee-api ./mdms-vee-api/infra/helm-chart/ -f ./mdms-vee-api/infra/helm-chart/Gomati-prod-values.yaml --set image.tag=$IMAGE_TAG --namespace mdms
+      - echo "Deployment complete."
+      - kubectl get all -n mdms
